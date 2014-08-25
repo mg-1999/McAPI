@@ -22,7 +22,7 @@ class McLatency {
 				break;
 
 			case McLatencyAction::CALCULATE:
-				$this->_latceny = round(($this->_stop - $this->_start) * 1000);
+				$this->_latceny = (double) number_format(($this->_stop - $this->_start) * 1000, 0);
 				break;
 
 			default:break;
