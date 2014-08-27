@@ -1,12 +1,17 @@
 <?php
 
-require_once __DIR__ . '/enum/McAPIVersion.class.php';
-require_once __DIR__ . '/enum/McAPIResult.class.php';
-require_once __DIR__ . '/enum/McLatencyAction.class.php';
+require_once __DIR__ . '/enum/McAPIVersion.enum.php';
+require_once __DIR__ . '/enum/McAPIResult.enum.php';
+require_once __DIR__ . '/enum/McAPILatencyAction.enum.php';
+require_once __DIR__ . '/enum/McAPIField.enum.php';
+require_once __DIR__ . '/enum/McAPILatencyAction.enum.php';
 
-require_once __DIR__ . '/util/McLatency.class.php';
+require_once __DIR__ . '/util/McAPILatency.util.php';
 
-class McAPIPing {
+class McAPIPing {   
+
+    private $safeMode   = true;
+    private $canRun     = true;
 
     private $ip;
     private $port;
@@ -14,6 +19,7 @@ class McAPIPing {
     private $_socket;
     private $_data;
     private $_latency;
+
     private $result = array(
         'result' => null,
         'hostname' => null,
@@ -34,22 +40,37 @@ class McAPIPing {
         ]
     );
 
-    public function __construct($ip, $port, $timeout = 2) {
+    public function __construct($ip, $port, $timeout = 2, $safeMode = true) {
+
+        $this->safeMode = $safeMode;
+
         $this->ip = (substr_count($ip, '.') != 4 ? $ip : gethostbyaddr($ip));
         $this->port = $port;
         $this->timeout = $timeout;
         $this->_latency = new McLatency();
 
-        if ($this->connect() === false) {
+        if (($this->canRun = $this->connect()) === false) {
             return $this->setValue('result', McAPIResult::CANT_CONNECT);
         }
     }
 
-    public function fetch($version) {
+    /**
+        @param McVersion $version The Minecraft-Version depends on the used version on the request server. If it's null the script tries to calculate the version, but this can takes a while. 
+    */
+    public function fetch($version = null) {
+
+        if($this->safeMode && !($this->canRun)) {
+            return $this->setValue('result', McAPIResult::CANT_CONNECT);
+        }
+
+        if($version === null) {
+            $version = $this->calculateVersion();
+            echo $version;
+        }
 
         switch ($version) {
 
-            //1.7 and 1.8
+            //1.7 and 1.8 but I will add a own script-part for 1.8 if the protocol changed maybe
             case McVersion::ONEDOTEIGHT:
             case McVersion::ONEDOTSEVEN:
 
@@ -60,24 +81,30 @@ class McAPIPing {
                 $this->send($handshake, strlen($handshake), 0);
                 $this->send("\x01\x00", 2, 0);
 
-
+                //get the packet-length
                 $packetLength = $this->packetLength();
 
+                //check the length of packet
                 if ($packetLength < 10) {
                     return $this->setValue('result', McAPIResult::PACKET_TO_SHORT);
                 }
 
+                //Stopss the Latency-Listener
                 $this->_latency->executeAction(McLatencyAction::STOP);
+                //Calculates the needed time for execute this script
                 $this->_latency->executeAction(McLatencyAction::CALCULATE);
 
+                //read the datas
                 $this->read(1);
                 $packetLength = $this->packetLength();
                 $this->_data = $this->read($packetLength, PHP_NORMAL_READ);
 
+                //validate the datas
                 if (!($this->_data)) {
                     return $this->setValue('result', McAPIResult::FAILED_TO_READ_DATA);
                 }
 
+                //decode the received datas
                 $this->_data = json_decode($this->_data);
 
                 //set values
@@ -98,22 +125,29 @@ class McAPIPing {
 
                 break; //1.7 and 1.8 
 
+            //1.6
             case McVersion::ONEDOTSIX:
 
+                //Starts the Latency-Listener
                 $this->_latency->executeAction(McLatencyAction::START); //start
 
+                //Opens the connection
                 $handle = fsockopen($this->ip, $this->port, $eerno, $errstr, 0.8);
 
                 if ($handle) {
                     return $this->setValue('result', McAPIResult::CANT_CONNECT);
                 }
                 
+                //Set timeout
                 stream_set_timeout($handle, 2);
 
+                //Send the packet
                 fwrite($handle, "\xFE\x01");
 
+                //read the return
                 $data = fread($handle, 1024);
                 
+                //validate datas
                 if ($data != false && substr($data, 0, 1) == "\xFF") {
                     return $this->setValue('result', McAPIResult::FAILED_TO_READ_DATA);
                 }
@@ -121,9 +155,11 @@ class McAPIPing {
                 $data = substr($data, 3);
                 $data = mb_convert_encoding($data, 'auto', 'UCS-2');
                 $data = explode("\x00", $data);
-                fclose($handle);
+                fclose($handle); 
                 
+                //Stopss the Latency-Listener
                 $this->_latency->executeAction(McLatencyAction::STOP);
+                //Calculates the needed time for execute this script
                 $this->_latency->executeAction(McLatencyAction::CALCULATE);
 
                 $this->_data = $data;
@@ -139,10 +175,64 @@ class McAPIPing {
                 $this->setValue('list.ping', $this->_latency->getLatency());
                 $this->setValue('result', McAPIResult::SUCCESSFULLY_DONE);
                 
-                echo "<b>", print_r(explode(' ', $this->_data[2])), "</b>";
+                //echo "<b>", print_r(explode(' ', $this->_data[2])), "</b>"; only for noob debugging
 
                 break; //1.6
         }
+    }
+
+    public function get($field) {
+
+        if($field === null) {
+            return $this->result;
+        }
+
+        if(is_array($field)) {
+
+            $result = array();
+
+            foreach ($field as $f) {
+    
+                $split = explode('_', strtolower($f));
+                $running = $this->result;
+
+                foreach ($split as $key) {
+                    $running = $running[$key];
+                }
+
+                $result[$f] = $running;
+
+            }
+
+            return $result;
+
+        }
+
+        $split = explode('_', strtolower($field));
+        $result = $this->result;
+        
+        foreach ($split as $key) {
+            $result = $result[$key];
+        }
+    
+        return $result;        
+
+    }
+
+    private function calculateVersion() {
+
+        $reflection = new ReflectionClass('McVersion');
+        foreach($reflection->getConstants() as $version) {
+            
+            $this->fetch($version);
+
+            if($this->get(McAPIField::RESULT) === McAPIResult::SUCCESSFULLY_DONE) {
+                echo "The version {$version} is the needed version.";
+                break;
+            }
+
+        }
+
     }
 
     public function test() {
@@ -163,9 +253,9 @@ class McAPIPing {
     }
 
     private function connect() {
-        $this->_socket = socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
         try {
-            return socket_connect($this->_socket, $this->ip, $this->port);
+            $this->_socket = @socket_create(AF_INET, SOCK_STREAM, SOL_TCP);
+            return @socket_connect($this->_socket, $this->ip, $this->port);
         } catch (Exception $e) {
             return false;
         }
