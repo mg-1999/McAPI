@@ -175,8 +175,6 @@ class McAPIPing {
                 $this->setValue('list.ping', $this->_latency->getLatency());
                 $this->setValue('result', McAPIResult::SUCCESSFULLY_DONE);
                 
-                //echo "<b>", print_r(explode(' ', $this->_data[2])), "</b>"; only for noob debugging
-
                 break; //1.6
         }
     }
@@ -227,7 +225,6 @@ class McAPIPing {
             $this->fetch($version);
 
             if($this->get(McAPIField::RESULT) === McAPIResult::SUCCESSFULLY_DONE) {
-                echo "The version {$version} is the needed version.";
                 break;
             }
 
