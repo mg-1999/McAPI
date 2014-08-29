@@ -1,6 +1,6 @@
 <?php
 
-abstract class McLatencyAction {
+abstract class McAPILatencyAction {
 
 	const START = 'START';
 	const STOP  = 'STOP';

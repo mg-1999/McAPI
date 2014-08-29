@@ -1,6 +1,6 @@
 <?php
 
-class McLatency {
+class McAPILatency {
 
 	private $_latceny;
 	private $_start;
@@ -11,15 +11,15 @@ class McLatency {
 	public function executeAction($action) {
 
 		switch ($action) {
-			case McLatencyAction::START:
+			case McAPILatencyAction::START:
 				$this->_start = microtime(true);
 				break;
 			
-			case McLatencyAction::STOP:
+			case McAPILatencyAction::STOP:
 				$this->_stop = microtime(true);
 				break;
 
-			case McLatencyAction::CALCULATE:
+			case McAPILatencyAction::CALCULATE:
 				$this->_latceny = (double) number_format(($this->_stop - $this->_start) * 100, 0);
 				break;
 

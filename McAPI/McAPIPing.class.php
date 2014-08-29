@@ -53,7 +53,7 @@ class McAPIPing {
         $this->ip = (substr_count($ip, '.') != 4 ? $ip : gethostbyaddr($ip));
         $this->port = $port;
         $this->timeout = $timeout;
-        $this->_latency = new McLatency();
+        $this->_latency = new McAPILatency();
 
         if (($this->canRun = $this->connect()) === false) {
             return $this->setValue('result', McAPIResult::CANT_CONNECT);
@@ -63,7 +63,7 @@ class McAPIPing {
     /**
     *   @param McAPIVersion $version The Minecraft-Version depends on the used version on the request server. If it's null the script tries to calculate the version, but this can takes a while. 
     */
-    public function fetch($version = null) {
+    public function fetch($version = null, $userVersion = false) {
 
         if($this->safeMode && !($this->canRun)) {
             return $this->setValue('result', McAPIResult::CANT_CONNECT);
@@ -73,13 +73,19 @@ class McAPIPing {
             $version = $this->calculateVersion();
         }
 
+        if($userVersion) {
+            
+            $version = McAPIVersion::getVersion($version);
+
+        }
+
         switch ($version) {
 
             //1.7 and 1.8 but I will add a own script-part for 1.8 if the protocol changed maybe
             case McAPIVersion::ONEDOTEIGHT:
             case McAPIVersion::ONEDOTSEVEN:
 
-                $this->_latency->executeAction(McLatencyAction::START);
+                $this->_latency->executeAction(McAPILatencyAction::START);
 
                 //say hello to the server
                 $handshake = pack('cccca*', hexdec(strlen($this->ip)), 0, 0x04, strlen($this->ip), $this->ip) . pack('nc', $this->port, 0x01);
@@ -95,9 +101,9 @@ class McAPIPing {
                 }
 
                 //Stopss the Latency-Listener
-                $this->_latency->executeAction(McLatencyAction::STOP);
+                $this->_latency->executeAction(McAPILatencyAction::STOP);
                 //Calculates the needed time for execute this script
-                $this->_latency->executeAction(McLatencyAction::CALCULATE);
+                $this->_latency->executeAction(McAPILatencyAction::CALCULATE);
 
                 //read the datas
                 $this->read(1);
@@ -123,7 +129,7 @@ class McAPIPing {
                 $this->setValue('software.name', (count($versionSplit) >= 2 ? $versionSplit[0] : null) );
                 $this->setValue('software.version', (count($versionSplit) >= 2 ? $versionSplit[1] : $this->_data->version->name));
 
-                $this->setValue('protocol', $this->_data->version->protocol);
+                $this->setValue('protocol', (int) $this->_data->version->protocol);
                 $this->setValue('players.max', $this->_data->players->max);
                 $this->setValue('players.online', $this->_data->players->online);
                 $this->setValue('list.motd', self::clearColour($this->_data->description));
@@ -132,29 +138,29 @@ class McAPIPing {
                 $this->setValue('list.ping', $this->_latency->getLatency());
                 $this->setValue('result', McAPIResult::SUCCESSFULLY_DONE);
 
-                break; //1.7 and 1.8 
+                return true; //1.7 and 1.8 
 
             //1.6
             case McAPIVersion::ONEDOTSIX:
 
                 //Starts the Latency-Listener
-                $this->_latency->executeAction(McLatencyAction::START); //start
+                $this->_latency->executeAction(McAPILatencyAction::START); //start
 
                 //Opens the connection
-                $handle = fsockopen($this->ip, $this->port, $eerno, $errstr, 0.8);
+                $handle = fsockopen($this->ip, $this->port, $eerno, $errstr, $this->timeout);
 
                 if (!($handle)) {
                     return $this->setValue('result', McAPIResult::CANT_CONNECT);
                 }
                 
                 //Set timeout
-                stream_set_timeout($handle, 2);
+                stream_set_timeout($handle, $this->timeout);
 
                 //Send the packet
                 fwrite($handle, "\xFE\x01");
 
                 //read the return
-                $data = fread($handle, 2048);
+                $data = fread($handle, 1024);
                 
                 //validate datas
                 if ($data === false && substr($data, 0, 1) == "\xFF") {
@@ -166,10 +172,13 @@ class McAPIPing {
                 $data = explode("\x00", $data);
                 fclose($handle);       
 
+                echo "<hr>";
+                echo "<pre>", var_dump($data),"</pre>";
+
                 //Stopss the Latency-Listener
-                $this->_latency->executeAction(McLatencyAction::STOP);
+                $this->_latency->executeAction(McAPILatencyAction::STOP);
                 //Calculates the needed time for execute this script
-                $this->_latency->executeAction(McLatencyAction::CALCULATE);
+                $this->_latency->executeAction(McAPILatencyAction::CALCULATE);
 
                 $this->_data = $data;
 
@@ -184,6 +193,8 @@ class McAPIPing {
                 $this->setValue('software.name', (count($versionSplit) >= 2 ? $versionSplit[0] : null) );
                 $this->setValue('software.version', (count($versionSplit) >= 2 ? $versionSplit[1] : $this->_data[2]));
 
+                $this->setValue('protocol', (int) $this->_data[1]);
+
                 $this->setValue('players.max', $this->_data[4]);
                 $this->setValue('players.online', $this->_data[5]);
                 
@@ -193,7 +204,9 @@ class McAPIPing {
                 
                 $this->setValue('result', McAPIResult::SUCCESSFULLY_DONE);
                 
-                break; //1.6
+                return true; //1.6
+
+            default: return false;
         }
     }
 
@@ -245,20 +258,8 @@ class McAPIPing {
 
         foreach($reflection->getConstants() as $version) {
 
-            if($version === McAPIVersion::ONEDOTSEVEN) {
-
-                if($this->connect()) {
-                    $version = McAPIVersion::ONEDOTSEVEN;
-                }
-
-            }
-
-            if($version === McAPIVersion::ONEDOTSIX) {
-
-                if(fsockopen($this->ip, $this->port, $eerno, $errstr, 0.8)) {
-                    $version = McAPIVersion::ONEDOTSIX;
-                }
-
+            if($this->fetch($version) === true) {
+                break;
             }
 
         }
@@ -272,15 +273,15 @@ class McAPIPing {
     }
 
     private function send($buf, $length, $flags) {
-        return @socket_send($this->_socket, $buf, $length, $flags);
+        return socket_send($this->_socket, $buf, $length, $flags);
     }
 
     private function read($length, $type = PHP_BINARY_READ) {
-        return @socket_read($this->_socket, $length, $type);
+        return socket_read($this->_socket, $length, $type);
     }
 
     private function receive($buf, $length, $flags = null) {
-        return @socket_recv($this->_socket, $buf, $length, $flags);
+        return socket_recv($this->_socket, $buf, $length, $flags);
     }
 
     private function connect() {
