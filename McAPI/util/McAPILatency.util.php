@@ -20,7 +20,7 @@ class McAPILatency {
 				break;
 
 			case McAPILatencyAction::CALCULATE:
-				$this->_latceny = (double) number_format(($this->_stop - $this->_start) * 100, 0);
+				$this->_latceny = (double) number_format(($this->_stop - $this->_start) * 1000, 0);
 				break;
 
 			default:break;

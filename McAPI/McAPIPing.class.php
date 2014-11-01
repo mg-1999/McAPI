@@ -21,7 +21,10 @@ class McAPIPing {
     private $_latency;
 
     private $result = array(
-        'result' => null,
+        'result' => [
+            'status'        => null,
+            'connection'    => null,
+        ],
         'hostname' => null,
         'software' => [
             'name'      => null,
@@ -41,10 +44,10 @@ class McAPIPing {
     );
 
     /**
-    *   @param string $ip The ip adress of the requested server
+    *   @param string $ip The ip address of the requested server
     *   @param int    $port The port of the requested server
     *   @param int    $timeout The time that have the server to answer the request
-    *   @param boolean $safeMode The save mode protects you for issues
+    *   @param bool $safeMode The save mode protects you for issues
     */
     public function __construct($ip, $port = 25565, $timeout = 2, $safeMode = true) {
 
@@ -56,21 +59,24 @@ class McAPIPing {
         $this->_latency = new McAPILatency();
 
         if (($this->canRun = $this->connect()) === false) {
-            return $this->setValue('result', McAPIResult::CANT_CONNECT);
+            return $this->setResult(McAPIResult::CANT_CONNECT);
         }
     }
 
     /**
-    *   @param McAPIVersion $version The Minecraft-Version depends on the used version on the request server. If it's null the script tries to calculate the version, but this can takes a while. 
-    */
+     * Fetching information from the given Minecraft server
+     * @param String|McAPIVersion $version  The Minecraft-Version depends on the used version on the request server. If it's null the script tries to calculate the version, but this can takes a while.
+     * @param bool $userVersion If it true the script tries to read the given version
+     * @return bool|void If it true the fetch worked successfully and it returns data
+     */
     public function fetch($version = null, $userVersion = false) {
 
         if($this->safeMode && !($this->canRun)) {
-            return $this->setValue('result', McAPIResult::CANT_CONNECT);
+            return $this->setResult(McAPIResult::CANT_CONNECT);
         }
 
         if($version === null) {
-            $version = $this->calculateVersion();
+            return $this->calculateVersion(); //fetching data with unknown version
         }
 
         if($userVersion) {
@@ -97,10 +103,11 @@ class McAPIPing {
 
                 //check the length of packet
                 if ($packetLength < 10) {
-                    return $this->setValue('result', McAPIResult::PACKET_TO_SHORT);
+                    return $this->setResult(McAPIResult::PACKET_TO_SHORT);
                 }
 
-                //Stopss the Latency-Listener
+
+                //Stops the Latency-Listener
                 $this->_latency->executeAction(McAPILatencyAction::STOP);
                 //Calculates the needed time for execute this script
                 $this->_latency->executeAction(McAPILatencyAction::CALCULATE);
@@ -112,14 +119,14 @@ class McAPIPing {
 
                 //validate the datas
                 if (!($this->_data)) {
-                    return $this->setValue('result', McAPIResult::FAILED_TO_READ_DATA);
+                    return $this->setResult(McAPIResult::FAILED_TO_READ_DATA);
                 }
 
                 //decode the received datas
                 $this->_data = json_decode($this->_data);
 
                 if(empty($this->_data)) {
-                    return $this->setValue('result', McAPIResult::EMPTY_RESULT);
+                    return $this->setResult(McAPIResult::EMPTY_RESULT);
                 }
 
                 //set values
@@ -136,7 +143,8 @@ class McAPIPing {
                 $this->setValue('list.motdRaw', $this->_data->description);
                 $this->setValue('list.favicon', (isset($this->_data->favicon) ? $this->_data->favicon : null));
                 $this->setValue('list.ping', $this->_latency->getLatency());
-                $this->setValue('result', McAPIResult::SUCCESSFULLY_DONE);
+
+                $this->setResult(McAPIResult::SUCCESSFULLY_DONE);
 
                 return true; //1.7 and 1.8 
 
@@ -150,7 +158,7 @@ class McAPIPing {
                 $handle = fsockopen($this->ip, $this->port, $eerno, $errstr, $this->timeout);
 
                 if (!($handle)) {
-                    return $this->setValue('result', McAPIResult::CANT_CONNECT);
+                    return $this->setResult(McAPIResult::CANT_CONNECT);
                 }
                 
                 //Set timeout
@@ -164,16 +172,12 @@ class McAPIPing {
                 
                 //validate datas
                 if ($data === false && substr($data, 0, 1) == "\xFF") {
-                    return $this->setValue('result', McAPIResult::FAILED_TO_READ_DATA);
+                    return $this->setResult(McAPIResult::FAILED_TO_READ_DATA);
                 }
 
                 $data = substr($data, 3);
                 $data = mb_convert_encoding($data, 'auto', 'UCS-2');
                 $data = explode("\x00", $data);
-                fclose($handle);       
-
-                echo "<hr>";
-                echo "<pre>", var_dump($data),"</pre>";
 
                 //Stopss the Latency-Listener
                 $this->_latency->executeAction(McAPILatencyAction::STOP);
@@ -183,7 +187,7 @@ class McAPIPing {
                 $this->_data = $data;
 
                 if(count($data) === 1) {
-                    return $this->setValue('result', McAPIResult::EMPTY_RESULT);
+                    return $this->setResult(McAPIResult::EMPTY_RESULT);
                 }
 
                 //setvalues
@@ -202,8 +206,8 @@ class McAPIPing {
                 $this->setValue('list.motdRaw', $this->_data[3]);
                 $this->setValue('list.ping', $this->_latency->getLatency());
                 
-                $this->setValue('result', McAPIResult::SUCCESSFULLY_DONE);
-                
+                $this->setResult(McAPIResult::SUCCESSFULLY_DONE);
+
                 return true; //1.6
 
             default: return false;
@@ -254,34 +258,43 @@ class McAPIPing {
     private function calculateVersion() {
         $reflection = new ReflectionClass('McAPIVersion');
 
-        $version = null;
-
         foreach($reflection->getConstants() as $version) {
 
-            if($this->fetch($version) === true) {
-                break;
+            if($version === McAPIVersion::TEST_VERSION) {
+                continue;
+            }
+
+            if($this->fetch($version)) {
+                return true;
             }
 
         }
 
-        return $version;
+        return false;
     }
 
-    public function test() {
-        //header("Content-type: application/json");
-        print_r(json_encode($this->result, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+    public function getError() {
+        return self::arrayToObject([
+                "id" => socket_last_error($this->_socket),
+                "description" => socket_strerror(socket_last_error($this->_socket))
+            ]);
+    }
+
+    private function setResult($result) {
+        $this->setValue('result.status', $result);
+        $this->setValue('result.connection', str_replace('operation', 'connection', $this->getError()->description));
     }
 
     private function send($buf, $length, $flags) {
-        return socket_send($this->_socket, $buf, $length, $flags);
+        return @socket_send($this->_socket, $buf, $length, $flags);
     }
 
     private function read($length, $type = PHP_BINARY_READ) {
-        return socket_read($this->_socket, $length, $type);
+        return @socket_read($this->_socket, $length, $type);
     }
 
     private function receive($buf, $length, $flags = null) {
-        return socket_recv($this->_socket, $buf, $length, $flags);
+        return @socket_recv($this->_socket, $buf, $length, $flags);
     }
 
     private function connect() {
@@ -320,18 +333,7 @@ class McAPIPing {
         return $a;
     }
 
-    private static function clearColour($motd) {
-        $motd = preg_replace_callback('/\\\\u([0-9a-z]{3,4})/i', function ($matches) {
-            return mb_convert_encoding(pack('H*', $matches[1]), 'UTF-8', 'UCS-2BE');
-        }, $motd);
-        $motd = preg_replace('/(§[0-9a-z])/i', '', $motd); //replace color codes
-        $motd = preg_replace('/(\\\\n?\\\\r|\\\\n)/', '', $motd); //replace line breaks
-        $motd = preg_replace('/(Â)?(«|»)?/', '', $motd); //replace more special chars
-        $motd = preg_replace("/(\\\u[a-f0-9]{4})/", "iconv('UCS-4LE','UTF-8',pack('V', hexdec('U$1')))", $motd); //replace unicodes
-        return (mb_detect_encoding($motd, 'UTF-8, ISO-8859-1') === 'UTF-8' ? $motd : utf8_decode($motd));
-    }
-
-    protected function setValue($path, $value) {
+    private function setValue($path, $value) {
 
         if (substr_count($path, '.')) {
             $split = explode('.', $path);
@@ -341,6 +343,34 @@ class McAPIPing {
 
         $this->result[$path] = $value;
         return $value;
+    }
+
+    private static function clearColour($motd) {
+
+        $parts = explode('\n', json_encode($motd));
+
+        for($i = 0; $i < count($parts); $i++) {
+
+            $temp = preg_replace('/([&§][0-9a-z])/', '', $parts[$i]); //remove colour codes
+            $temp = preg_replace('/((\\\\u)([a-zA-Z0-9]{1,5}))/', '', $temp); //remove unicodes
+            $temp = preg_replace("/(\")/", '', $temp); //remove useless quotes
+            $temp = preg_replace("/(  )/", ' ', $temp); //remove useless spaces
+
+            $parts[$i] = $temp;
+
+        }
+
+        return $parts;
+    }
+
+    private static function arrayToObject($array) {
+        $object = new stdClass();
+
+        foreach ($array as $key => $value) {
+            $object->$key = $value;
+        }
+
+        return $object;
     }
 
 }
