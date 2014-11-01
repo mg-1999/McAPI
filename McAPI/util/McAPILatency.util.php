@@ -2,7 +2,7 @@
 
 class McAPILatency {
 
-	private $_latceny;
+	private $_latency;
 	private $_start;
 	private $_stop;
 
@@ -19,8 +19,12 @@ class McAPILatency {
 				$this->_stop = microtime(true);
 				break;
 
+            case McAPILatencyAction::ADD:
+                $this->_stop += microtime(true);
+                break;
+
 			case McAPILatencyAction::CALCULATE:
-				$this->_latceny = (double) number_format(($this->_stop - $this->_start) * 1000, 0);
+				$this->_latency = (double) number_format(($this->_stop - $this->_start) * 1000, 0);
 				break;
 
 			default:break;
@@ -29,7 +33,7 @@ class McAPILatency {
 	}
 
 	public function getLatency() {
-		return $this->_latceny;
+		return $this->_latency;
 	}
 
 }

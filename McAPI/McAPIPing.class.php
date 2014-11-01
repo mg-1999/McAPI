@@ -8,7 +8,17 @@ require_once __DIR__ . '/enum/McAPILatencyAction.enum.php';
 
 require_once __DIR__ . '/util/McAPILatency.util.php';
 
-class McAPIPing {   
+class McAPIPing {
+
+    private static $unicodes = [
+        '\\\\u00c4' => 'A',
+        '\\\\u00e4' => 'ä',
+        '\\\\u00d6' => 'Ö',
+        '\\\\u00f6' => 'ö',
+        '\\\\u00dc' => 'Ü',
+        '\\\\u00fc' => 'ü',
+        '\\\\u00df' => 'ß'
+    ];
 
     private $safeMode   = true;
     private $canRun     = true;
@@ -24,22 +34,25 @@ class McAPIPing {
         'result' => [
             'status'        => null,
             'connection'    => null,
+            'script'        => [
+                'executionTime' => -1
+            ]
         ],
         'hostname' => null,
         'software' => [
             'name'      => null,
             'version'   => 0.0
         ],
-        'protocol' => 0.0,
-        'players' => [
-            'max' => 0,
-            'online' => 0
+        'protocol'  => 0.0,
+        'players'   => [
+            'max'       => 0,
+            'online'    => 0
         ],
         'list' => [
-            'motd' => null,
-            'motdRaw' => null,
-            'favicon' => null,
-            'ping' => -1
+            'motd'      => null,
+            'motdRaw'   => null,
+            'favicon'   => null,
+            'ping'      => -1
         ]
     );
 
@@ -75,7 +88,7 @@ class McAPIPing {
             return $this->setResult(McAPIResult::CANT_CONNECT);
         }
 
-        if($version === null) {
+        if(is_null($version)) {
             return $this->calculateVersion(); //fetching data with unknown version
         }
 
@@ -212,14 +225,15 @@ class McAPIPing {
 
             default: return false;
         }
+
     }
 
     /**
     * @param McAPIField, array $field The requested Datas
     */
-    public function get($field) {
+    public function get($field = null) {
 
-        if($field === null) {
+        if(is_null($field)) {
             return $this->result;
         }
 
@@ -283,6 +297,9 @@ class McAPIPing {
     private function setResult($result) {
         $this->setValue('result.status', $result);
         $this->setValue('result.connection', str_replace('operation', 'connection', $this->getError()->description));
+        $this->setValue('result.script', [
+            'executionTime' => (double) number_format((microtime(true) - $_SERVER["REQUEST_TIME_FLOAT"]) * 1000, 0)
+        ]);
     }
 
     private function send($buf, $length, $flags) {
@@ -352,11 +369,17 @@ class McAPIPing {
         for($i = 0; $i < count($parts); $i++) {
 
             $temp = preg_replace('/([&§][0-9a-z])/', '', $parts[$i]); //remove colour codes
+
+            foreach(self::$unicodes as $unicode => $char) {
+                $temp = preg_replace('/(' . $unicode . ')/', $char, $temp);
+            }
+
             $temp = preg_replace('/((\\\\u)([a-zA-Z0-9]{1,5}))/', '', $temp); //remove unicodes
             $temp = preg_replace("/(\")/", '', $temp); //remove useless quotes
             $temp = preg_replace("/(  )/", ' ', $temp); //remove useless spaces
+            $temp = preg_replace("/(\\\\\\/)/", '/', $temp); //remove useless backslahes
 
-            $parts[$i] = $temp;
+            $parts[$i] = utf8_decode($temp);
 
         }
 
