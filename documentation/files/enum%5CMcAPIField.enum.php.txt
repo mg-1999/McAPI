@@ -2,26 +2,80 @@
 
 abstract class McAPIField {
 
+    /**
+     * returns all information about the requested server
+     */
 	const ALL 				= null;
 
+    /**
+     * returns the result e.g. the connection was successfully
+     */
 	const RESULT 			= 'RESULT';
-	const HOSTNAME 			= 'HOSTNAME';
-	
-	const SOFTWARE_ALL 		= 'SOFTWARE';
-	const SOFTWARE_NAME 	= 'SOFTWARE_NAME';
-	const SOFTWARE_VERSION 	= 'SOFTWARE_VERSION';
 
-	const PROTOCOL 			= 'PROTOCOL';
+    /**
+     * returns only the hostname of the server
+     */
+    const HOSTNAME 			= 'HOSTNAME';
 
+    /**
+     * returns all information about the software
+     */
+    const SOFTWARE_ALL 		= 'SOFTWARE';
+
+    /**
+     * returns only the name of the software
+     */
+    const SOFTWARE_NAME 	= 'SOFTWARE_NAME';
+
+    /**
+     * returns only the version of the software
+     */
+    const SOFTWARE_VERSION 	= 'SOFTWARE_VERSION';
+
+    /**
+     * returns the used data-connection protocol
+     */
+    const PROTOCOL 			= 'PROTOCOL';
+
+    /**
+     * returns all information about the players
+     */
 	const PLAYERS_ALL 		= 'PLAYERS';
-	const PLAYERS_MAX 		= 'PLAYERS_MAX';
-	const PLAYERS_ONLINE 	= 'PLAYERS_ONLINE';
 
-	const LIST_ALL			= 'LIST';
-	const LIST_MOTD	 		= 'LIST_MOTD';
-	const LIST_MOTD_RAW 	= 'LIST_MOTD_RAW';
-	const LIST_FAVICON		= 'LIST_FAVICON';
-	const LIST_PING			= 'LIST_PING';
+    /**
+     * returns only the number of slots
+     */
+    const PLAYERS_MAX 		= 'PLAYERS_MAX';
+
+    /**
+     * returns the number of used slots
+     */
+    const PLAYERS_ONLINE 	= 'PLAYERS_ONLINE';
+
+    /**
+     * returns all information about the list
+     */
+    const LIST_ALL			= 'LIST';
+
+    /**
+     * returns the motd (message of the day), but the clean version
+     */
+    const LIST_MOTD	 		= 'LIST_MOTD';
+
+    /**
+     * returns the raw motd (message of the day)
+     */
+    const LIST_MOTD_RAW 	= 'LIST_MOTD_RAW';
+
+    /**
+     * returns a base64 string a the favicon image
+     */
+    const LIST_FAVICON		= 'LIST_FAVICON';
+
+    /**
+     * returns the ping of the requested server
+     */
+    const LIST_PING			= 'LIST_PING';
 
 }
 
